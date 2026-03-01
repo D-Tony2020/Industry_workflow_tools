@@ -38,7 +38,7 @@ def write_output_excel(output_rows, output_path):
             value = row_data.get(col_name, "")
 
             # 数字字段转换
-            if col_name in ("数量", "采购单价") and value:
+            if col_name == "数量" and value:
                 try:
                     value = float(str(value).replace(",", ""))
                 except (ValueError, TypeError):

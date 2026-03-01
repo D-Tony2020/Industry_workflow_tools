@@ -1,8 +1,10 @@
 """PDF采购单解析模块 - 使用pdfplumber提取表格数据
 
 生久科技采购单PDF表格结构（6列，每个项目占2行）：
-  主行:   [项次, "YY编号 规格\n品名\n图号", None, "单价\n数量\n单位", "金额\n日期\n税率", 交期]
+  主行:   [项次, "YY编号 规格\n品名\n图号", None, "单价\n数量\n单位", "金额\n日期\n税率", 交期回复]
   续行:   [None, "备注内容", None, None, None, None]
+
+注: 交期回复列（最后一列）通常为空，用户可通过PDF编辑器在此列填写最新图纸版本号
 """
 import pdfplumber
 import re
@@ -116,6 +118,7 @@ def _parse_main_row(cells):
         "出货日期": "",
         "税率": "",
         "备注": "",
+        "交期回复": "",
     }
 
     # ===== 解析列2: "YY编号 规格\n品名\n图号" =====
@@ -169,6 +172,12 @@ def _parse_main_row(cells):
             item["出货日期"] = parts[1].strip()
         if len(parts) >= 3:
             item["税率"] = parts[2].strip()
+
+    # ===== 交期回复列（表格最后一列）=====
+    # 用户可能通过PDF编辑器在此列填写最新图纸版本号（如 A02）
+    last_cell = cells[-1] if cells else ""
+    if last_cell and last_cell != item["项次"]:
+        item["交期回复"] = last_cell.strip()
 
     return item
 
