@@ -194,23 +194,9 @@ class OrderConverterApp:
         self.drawing_stats_label = ttk.Label(btn_row, text="")
         self.drawing_stats_label.pack(side=tk.LEFT, padx=10)
 
-        # 比对结果 Treeview
-        self.drawing_tree = ttk.Treeview(
-            drawing_frame,
-            columns=DRAWING_COLUMNS,
-            show="headings",
-            height=8,
-        )
-
-        dvsb = ttk.Scrollbar(
-            drawing_frame, orient="vertical", command=self.drawing_tree.yview
-        )
-        dhsb = ttk.Scrollbar(
-            drawing_frame, orient="horizontal", command=self.drawing_tree.xview
-        )
-        self.drawing_tree.configure(
-            yscrollcommand=dvsb.set, xscrollcommand=dhsb.set
-        )
+        # 比对结果 Treeview（放在子frame中，避免与pack混用grid）
+        tree_container = ttk.Frame(drawing_frame)
+        tree_container.pack(fill=tk.BOTH, expand=True)
 
         drawing_col_widths = {
             "yy_code": 120,
@@ -219,26 +205,6 @@ class OrderConverterApp:
             "status": 80,
             "message": 350,
         }
-        for col in DRAWING_COLUMNS:
-            self.drawing_tree.heading(col, text=DRAWING_HEADERS.get(col, col))
-            self.drawing_tree.column(
-                col, width=drawing_col_widths.get(col, 80), minwidth=40
-            )
-
-        self.drawing_tree.grid(row=2, column=0, sticky="nsew")
-        dvsb.grid(row=2, column=1, sticky="ns")
-        dhsb.grid(row=3, column=0, sticky="ew")
-
-        # 让dir_row和btn_row占据row 0和row 1 (通过pack)，Treeview用grid
-        # 需要调整布局：将Treeview和滚动条放在子frame中
-        # 重新组织：用一个内部frame包裹Treeview
-        # 先清除grid布局
-        self.drawing_tree.grid_forget()
-        dvsb.grid_forget()
-        dhsb.grid_forget()
-
-        tree_container = ttk.Frame(drawing_frame)
-        tree_container.pack(fill=tk.BOTH, expand=True)
 
         self.drawing_tree = ttk.Treeview(
             tree_container,
