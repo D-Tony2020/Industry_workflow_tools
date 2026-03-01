@@ -4,6 +4,13 @@
 
 ## factory_order_tool - 工厂订单转换工具
 
+### 业务背景
+
+- **客户**：宁波生久科技有限公司（下游采购方，发出采购单PDF）
+- **工厂**：宁波市久益电子有限公司（我方，接收采购单并录入ERP系统）
+- **痛点**：客户采购单PDF中使用客户自己的料件编号体系（YY编号），工厂ERP系统使用另一套产品编号体系（J编号），过去需要人工逐条查找对应关系并手工填写，效率低且易出错
+- **产品类型**：电子线材（AWG规格导线，单股多芯、成品线材等）
+
 ### 功能
 
 将客户（生久科技）的采购单 PDF 自动转换为工厂 ERP 系统可导入的 Excel 文件。
@@ -13,36 +20,117 @@
 ### 技术栈
 
 - Python 3 + Tkinter GUI
-- pdfplumber：PDF 表格解析
+- pdfplumber：PDF 表格解析（电子PDF，非扫描件）
 - openpyxl：Excel 读写
-- PyInstaller：打包为 Windows .exe
+- PyInstaller：打包为 Windows .exe（onedir模式，~68MB）
+- 运行时仅2个第三方依赖：pdfplumber + openpyxl
 
 ### 模块结构
 
 ```
 factory_order_tool/
-├── main.py          # GUI 主界面 (OrderConverterApp, Tkinter)
-├── pdf_parser.py    # PDF 解析 (pdfplumber, 适配生久科技采购单6/7列表格)
-├── code_mapper.py   # 编码映射 (读取 mapping_table.xlsx, 客户料号→工厂编号)
-├── excel_writer.py  # Excel 输出 (openpyxl, 19列工厂导入模板)
-├── config.py        # 配置常量 (列名定义, 路径, 输出模板列)
-├── version.py       # 版本信息 (VERSION, APP_NAME, BUILD_DATE)
-├── mapping_table.xlsx  # 映射表数据文件
-├── requirements.txt    # 依赖: pdfplumber, openpyxl
-├── build.bat           # 打包脚本
-└── 订单转换工具.spec    # PyInstaller 打包配置
+├── main.py              # GUI 主界面 (OrderConverterApp, Tkinter)
+├── pdf_parser.py        # PDF 解析 (pdfplumber, 适配生久科技采购单6/7列表格)
+├── code_mapper.py       # 编码映射 (读取 mapping_table.xlsx, 客户料号→工厂编号)
+├── excel_writer.py      # Excel 输出 (openpyxl, 19列工厂导入模板)
+├── config.py            # 配置常量 (列名定义, 路径, 输出模板列)
+├── version.py           # 版本信息 (VERSION, APP_NAME, BUILD_DATE)
+├── mapping_table.xlsx   # 映射表数据文件（不入Git，含业务数据）
+├── requirements.txt     # 依赖: pdfplumber, openpyxl
+├── build.bat            # 打包脚本（使用.venv虚拟环境）
+├── CHANGELOG.md         # 更新日志
+└── README.md            # 用户使用说明（在仓库根目录）
 ```
 
-### 关键业务逻辑
+### PDF采购单结构（关键）
 
-- **PDF 格式**：生久科技采购单，每个项目占2行（主行+续行），料件编号以 `YY` 开头
-- **映射表**：`mapping_table.xlsx`，键=产品规格（客户料号），值=产品编号+名称+工艺路线
-- **输出格式**：19列（`config.py:OUTPUT_COLUMNS`），数量和单价自动转数字
-- **GUI 预览**：绿色=映射成功，红色=未映射
+**来源**：生久科技ERP系统导出的电子PDF（文字可选中，非扫描件）
+
+**表头信息**：编号、采购单号(PM71-GS-...)、供应商、采购日期、到厂时间、联系人、付款条件
+
+**表格结构**：6列（偶尔7列），每个项目占2行：
+```
+主行:   [项次, "YY编号 规格\n品名\n图号", 空, "单价\n数量\n单位", "金额\n日期\n税率", 交期]
+续行:   [空, "备注内容(SA/SB/SC...编号)", 空, 空, 空, 空]
+```
+
+**关键字段**：
+- 项次：1-43等序号
+- 料件编号：`YY` 开头（如 YY60030058），这是映射键
+- 品名：如 "24AWG单股多芯"、"26AWG成品线材"
+- 图号：`DX-` 开头（如 DX-160711-01），部分产品无图号显示 "-"
+- 规格：RoHS/UL线规描述（如 RoHS/UL1007/24AWG/BLACK/L=360/NA【汇川】）
+- 数值列以 `\n` 分隔堆叠在同一单元格中
+
+**注意**：第6页表格偶尔为7列（多一个空列），pdf_parser.py 中通过智能定位（搜索含PCS和%的单元格）来自适应。
+
+### 映射表结构（关键）
+
+**文件**：`mapping_table.xlsx`（即工厂系统导出的"产品定义"表）
+
+**实际列**：序号 | 库存数量 | **产品编号** | **产品名称** | 单位 | **产品规格** | **工艺路线** | 默认供应商 | 创建时间 | ...（共16列）
+
+**映射关系**：
+- 映射键：`产品规格` 列 = 客户料件编号（如 YY60030058）
+- 映射值：`产品编号` 列 = 工厂系统编码（如 J00010038）
+- 同时获取：`产品名称`（如 "双剥镀 UL1007#24 黑色2+5 L=360mm B/0"）和 `工艺路线`（如 "双剥镀-自动机"）
+- 当前映射表有 **689条** 记录，样例PDF中42个不同编号全部覆盖
+
+### 输出Excel格式（关键）
+
+**模板名**：「导入产品明细模板」，工厂ERP系统导入用
+
+**19列**（定义在 `config.py:OUTPUT_COLUMNS`）：
+```
+产品编号 | 产品名称 | 产品规格 | 数量 | 计划开始时间 | 计划结束时间 |
+工艺路线名称 | 工序列表 | 备注 | 更新 | 工单分类 | 供应商 |
+供应商名称 | 供应商联系人 | 供应商联系电话 | 收货地址 | 采购单价 |
+客户选择 | 关联产品
+```
+
+**字段填充规则**：
+| 输出列 | 数据来源 |
+|--------|----------|
+| 产品编号 | 映射表 → 产品编号 (J...) |
+| 产品名称 | 映射表 → 产品名称 |
+| 产品规格 | PDF → 料件编号 (YY...) |
+| 数量 | PDF → 采购数量 |
+| 计划结束时间 | PDF → 出货日期 |
+| 工艺路线名称 | 映射表 → 工艺路线 |
+| 备注 | PDF → 备注行 |
+| 采购单价 | PDF → 单价 |
+| 其余列 | 空（暂未指定来源） |
+
+### GUI功能
+
+- **文件选择**：选择PDF + 解析并映射（一键完成）
+- **预览表格**：Treeview显示9个关键列，绿色=已映射/红色=未映射
+- **映射表管理**：一键打开Excel编辑 + 热重载（无需重启）
+- **导出**：按模板格式生成xlsx，默认文件名含采购单号
+- **关于对话框**：显示版本号和构建日期
+- **状态栏**：左侧显示操作状态，右侧显示版本号
 
 ### 开发约定
 
-- 版本号统一在 `version.py` 中维护
+- 版本号唯一来源：`version.py`（VERSION, APP_NAME, BUILD_DATE）
 - 配置常量统一在 `config.py` 中定义
-- 打包使用 `build.bat`，确保在虚拟环境中构建
+- 打包使用 `build.bat`，必须在 `.venv` 虚拟环境中构建（避免打入无关依赖）
+- 打包产物输出到 `dist/订单转换工具_v{VERSION}/`
+- `mapping_table.xlsx` 含业务数据，不入 Git（在 .gitignore 中排除）
 - 当前版本：v1.0.0
+
+### 返修/版本迭代流程
+
+1. 修改代码
+2. `version.py` 更新版本号（如 1.0.0 → 1.0.1）
+3. `CHANGELOG.md` 记录变更内容
+4. `git commit` + `git tag v1.0.1`
+5. 双击 `build.bat` 重新打包
+6. 将 `dist/订单转换工具_v1.0.1/` 文件夹发给用户替换
+
+### 部署环境
+
+- 目标系统：Windows 10/11 工厂电脑
+- 杀毒软件：Windows Defender
+- 部署方式：复制文件夹即可，无需安装Python或任何运行环境
+- 打包模式：PyInstaller --onedir（~68MB），首次启动快，杀毒误报率低
