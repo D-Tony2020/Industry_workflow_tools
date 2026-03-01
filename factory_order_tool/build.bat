@@ -33,7 +33,6 @@ if exist "订单转换工具.spec" del "订单转换工具.spec"
 echo.
 echo [3/4] 开始打包（单文件夹模式）...
 .venv\Scripts\python.exe -m PyInstaller --onedir --windowed --name "订单转换工具" ^
-    --add-data "mapping_table.xlsx;." ^
     --clean ^
     main.py
 
@@ -42,6 +41,12 @@ echo [4/4] 整理输出...
 set RELEASE_DIR=dist\订单转换工具_v%VER%
 if exist "%RELEASE_DIR%" rmdir /s /q "%RELEASE_DIR%"
 rename "dist\订单转换工具" "订单转换工具_v%VER%"
+
+:: 将映射表复制到发布根目录（与 _internal 同级，供用户编辑维护）
+if exist "mapping_table.xlsx" (
+    copy /Y "mapping_table.xlsx" "%RELEASE_DIR%\mapping_table.xlsx" >nul
+    echo   已复制 mapping_table.xlsx 到发布目录
+)
 
 echo.
 echo ========================================
