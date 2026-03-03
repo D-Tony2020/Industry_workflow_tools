@@ -1,5 +1,6 @@
 """编码映射模块 - 读取料号清单Excel，执行客户编码到工厂编码的映射"""
 import os
+from datetime import datetime, date
 from openpyxl import load_workbook
 from config import (
     MAPPING_TABLE_PATH,
@@ -101,6 +102,8 @@ def apply_mapping(items, mapping):
     output_rows = []
     unmapped = []
 
+    today_str = date.today().strftime("%Y/%m/%d")
+
     for item in items:
         customer_code = item.get("料件编号", "").strip()
         product_info = mapping.get(customer_code)
@@ -112,16 +115,20 @@ def apply_mapping(items, mapping):
         except (ValueError, TypeError):
             qty = raw_qty  # 无法转换时保留原值
 
+        # 计划结束时间 = 订单交货日期（若早于今天则用今天）
+        delivery_date_str = item.get("出货日期", "").strip()
+        end_date = _resolve_end_date(delivery_date_str, today_str)
+
         row = {
             # ===== 5个必填字段 =====
             "产品编号": "",
             "产品规格": customer_code,
             "数量": qty,
-            "计划开始时间": item.get("出货日期", ""),
+            "计划开始时间": today_str,
             "工单分类": OUTPUT_ORDER_TYPE,
             # ===== 其余列留空 =====
             "产品名称": "",
-            "计划结束时间": "",
+            "计划结束时间": end_date,
             "工艺路线名称": "",
             "工序列表": "",
             "备注": "",
@@ -155,6 +162,37 @@ def apply_mapping(items, mapping):
         output_rows.append(row)
 
     return output_rows, unmapped
+
+
+def _resolve_end_date(delivery_date_str, today_str):
+    """
+    解析交货日期，若早于今天则返回今天。
+
+    支持格式: "2026/03/28", "2026-03-28" 等常见日期格式
+
+    参数:
+        delivery_date_str: str - 订单中的交货日期
+        today_str: str - 今天日期 (YYYY/MM/DD)
+
+    返回:
+        str - 有效的结束日期 (YYYY/MM/DD)
+    """
+    if not delivery_date_str:
+        return today_str
+
+    # 尝试解析交货日期
+    for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%Y.%m.%d"):
+        try:
+            delivery_date = datetime.strptime(delivery_date_str, fmt).date()
+            today = datetime.strptime(today_str, "%Y/%m/%d").date()
+            if delivery_date < today:
+                return today_str
+            return delivery_date.strftime("%Y/%m/%d")
+        except ValueError:
+            continue
+
+    # 无法解析时原样返回
+    return delivery_date_str
 
 
 def get_mapping_stats(output_rows):

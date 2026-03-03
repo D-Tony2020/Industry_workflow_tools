@@ -53,4 +53,4 @@ OUTPUT_COLUMNS = [
 
 # ===== 图纸比对相关 =====
 DRAWING_PRINT_FOLDER = "待打印"                          # 待打印文件夹名
-DRAWING_REV_PATTERN = r"(?:版本号|版本)\s*(?:REV)?\s*(\S+)"  # 图纸PDF中REV字段正则
+DRAWING_REV_PATTERN = r"(?:版本号)\s*(?:REV)?\s*\d*\s*([A-Z][/.]?\d+)"  # 图纸PDF中REV字段正则

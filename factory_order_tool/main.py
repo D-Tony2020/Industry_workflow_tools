@@ -19,6 +19,7 @@ PREVIEW_COLUMNS = [
     "产品规格",
     "数量",
     "计划开始时间",
+    "计划结束时间",
     "工单分类",
     "_映射状态",
 ]
@@ -28,7 +29,8 @@ PREVIEW_HEADERS = {
     "_产品名称": "产品名称",
     "产品规格": "客户料号",
     "数量": "数量",
-    "计划开始时间": "出货日期",
+    "计划开始时间": "开始日期",
+    "计划结束时间": "交货日期",
     "工单分类": "工单分类",
     "_映射状态": "状态",
 }
@@ -48,6 +50,16 @@ DRAWING_HEADERS = {
     "local_version": "本地版本",
     "status": "状态",
     "message": "说明",
+}
+
+# 状态中文显示
+STATUS_LABELS = {
+    "match": "匹配",
+    "mismatch": "不匹配",
+    "no_drawing": "无图纸",
+    "no_version": "无版本",
+    "no_pdf_version": "无法提取",
+    "skipped": "跳过",
 }
 
 
@@ -127,10 +139,11 @@ class OrderConverterApp:
 
         col_widths = {
             "产品编号": 110,
-            "_产品名称": 280,
+            "_产品名称": 250,
             "产品规格": 110,
             "数量": 60,
-            "计划开始时间": 100,
+            "计划开始时间": 90,
+            "计划结束时间": 90,
             "工单分类": 80,
             "_映射状态": 60,
         }
@@ -454,6 +467,9 @@ class OrderConverterApp:
         for result in self.drawing_results:
             values = [result.get(col, "") for col in DRAWING_COLUMNS]
             status = result.get("status", "")
+            # 将status列替换为中文
+            status_idx = DRAWING_COLUMNS.index("status")
+            values[status_idx] = STATUS_LABELS.get(status, status)
             tag = status if status else "skipped"
             self.drawing_tree.insert("", tk.END, values=values, tags=(tag,))
 

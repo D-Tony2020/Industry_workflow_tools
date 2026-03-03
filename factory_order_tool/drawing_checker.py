@@ -84,8 +84,8 @@ def find_drawing_file(drawing_dir, yy_code):
     if not drawing_dir or not os.path.isdir(drawing_dir):
         return None
 
-    # glob匹配: YY编号开头的pdf文件
-    pattern = os.path.join(drawing_dir, f"{yy_code}*.[pP][dD][fF]")
+    # glob匹配: 文件名中包含YY编号的pdf文件
+    pattern = os.path.join(drawing_dir, f"*{yy_code}*.[pP][dD][fF]")
     matches = glob.glob(pattern)
 
     if matches:
