@@ -710,11 +710,10 @@ class OrderConverterApp:
             wraplength=780,
         ).pack(padx=15, pady=(15, 2), anchor=tk.W)
 
-        tk.Label(
+        ttk.Label(
             win,
             text="命名格式: 工厂编号 客户料号-版本号.pdf  （可选末尾追加产品类型）",
-            fg="#CC0000",
-            font=("", 9, "bold"),
+            foreground="gray",
         ).pack(padx=15, pady=(0, 5), anchor=tk.W)
 
         # 未映射物料警告
@@ -801,6 +800,20 @@ class OrderConverterApp:
                 tags=(status,),
             )
 
+        # ---- 鼠标附近自动消失气泡 ----
+        def _show_toast(text, x, y):
+            """在 (x, y) 屏幕坐标附近弹出小气泡，1.2秒后自动消失"""
+            t = tk.Toplevel(win)
+            t.overrideredirect(True)
+            t.attributes("-topmost", True)
+            t.geometry(f"+{x + 12}+{y - 28}")
+            lbl = tk.Label(
+                t, text=text, bg="#323232", fg="white",
+                font=("", 9), padx=8, pady=4,
+            )
+            lbl.pack()
+            t.after(1200, t.destroy)
+
         # 双击复制规范文件名
         def on_double_click(event):
             sel = tree.selection()
@@ -809,7 +822,7 @@ class OrderConverterApp:
                 name = vals[5]  # filename 在第6列（index 5）
                 win.clipboard_clear()
                 win.clipboard_append(str(name))
-                self.status_text.set(f"已复制: {name}")
+                _show_toast("已复制", event.x_root, event.y_root)
 
         tree.bind("<Double-1>", on_double_click)
 
@@ -821,11 +834,10 @@ class OrderConverterApp:
             text = "\n".join(all_names)
             win.clipboard_clear()
             win.clipboard_append(text)
-            messagebox.showinfo(
-                "已复制",
-                f"已将 {len(all_names)} 个规范文件名复制到剪贴板",
-                parent=win,
-            )
+            # 气泡显示在按钮附近
+            x = win.winfo_rootx() + win.winfo_width() - 100
+            y = win.winfo_rooty() + win.winfo_height() - 40
+            _show_toast(f"已复制 {len(all_names)} 条", x, y)
 
         tk.Label(
             btn_frame,
