@@ -14,7 +14,8 @@
 
 图纸文件名提取策略:
   - YY编号: 直接搜索 YY\\d{8,} 模式
-  - 版本号: 先删除文件名中的 J\\d+ 和 YY\\d+ 片段，再搜索 [A-Z][/.]?\\d{2,} 模式
+  - 版本号: 先删除文件名中的 J\\d+ 和 YY\\d+ 片段，再搜索 [A-Z][/.]?\\d+ 模式
+  - 兼容: A01/A0/A.1/A/01/B/0 等各种版本号格式
   - 兼容各种人工命名差异（顺序、分隔符、有无"版"字、全角括号等）
 
 推荐命名: J00016025 YY60030362-A01.pdf（可选末尾追加产品类型: J00016025 YY60030362-A01导线.pdf）
@@ -32,8 +33,8 @@ YY_CODE_PATTERN = re.compile(r"(YY\d{8,})")
 # 用于清理文件名中的J编号和YY编号，以便提取版本号
 _CLEAN_JY_PATTERN = re.compile(r"(?:J\d+|YY\d+)")
 
-# 版本号模式: 大写字母 + 可选分隔符 + 2位以上数字
-_VERSION_PATTERN = re.compile(r"([A-Z][/.]?\d{2,})")
+# 版本号模式: 大写字母 + 可选分隔符 + 1位以上数字（兼容 A0/B0/A.1/A/0 等单位数格式）
+_VERSION_PATTERN = re.compile(r"([A-Z][/.]?\d+)")
 
 
 # ========== 版本号提取 ==========
@@ -57,8 +58,8 @@ def extract_version_from_name(product_name):
     # 取末尾 token
     token = product_name.strip().split()[-1]
 
-    # 匹配版本号模式: 字母开头 + 可选分隔符 + 数字
-    if re.match(r"^[A-Z][/.]?\d+$", token):
+    # 匹配版本号模式: 字母开头 + 可选分隔符 + 数字（含纯字母如 "A"）
+    if re.match(r"^[A-Z][/.]?\d*$", token):
         return token
 
     return None
