@@ -11,7 +11,7 @@ from config import MAPPING_TABLE_PATH, APP_DIR, DRAWING_PRINT_FOLDER
 from pdf_parser import parse_purchase_order
 from code_mapper import load_mapping_table, apply_mapping, get_mapping_stats
 from excel_writer import write_output_excel
-from drawing_checker import check_drawings, get_check_stats, batch_print
+from drawing_checker import check_drawings, get_check_stats, merge_and_print
 
 # 用户设置文件（与exe同目录）
 SETTINGS_PATH = os.path.join(APP_DIR, "settings.json")
@@ -854,7 +854,7 @@ class OrderConverterApp:
         )
 
     def _batch_print(self):
-        """一键全部打印"""
+        """一键全部打印（合并为单个PDF，保证打印顺序与表格一致）"""
         drawing_dir = self.drawing_dir.get().strip()
         if not drawing_dir:
             return
@@ -864,12 +864,63 @@ class OrderConverterApp:
             messagebox.showwarning("提示", "待打印文件夹不存在")
             return
 
-        count = batch_print(print_folder)
-        if count > 0:
-            self.status_text.set(f"已发送 {count} 个文件到打印机")
-            messagebox.showinfo("打印", f"已将 {count} 个PDF文件发送到默认打印机")
-        else:
+        # 从比对结果中提取有序的已匹配文件路径（与表格顺序一致）
+        ordered_paths = []
+        for r in self.drawing_results:
+            if r.get("status") == "match" and r.get("drawing_path"):
+                basename = os.path.basename(r["drawing_path"])
+                copy_path = os.path.join(print_folder, basename)
+                if os.path.isfile(copy_path):
+                    ordered_paths.append(copy_path)
+
+        if not ordered_paths:
             messagebox.showwarning("提示", "待打印文件夹中没有PDF文件")
+            return
+
+        self.status_text.set("正在合并图纸...")
+        self.root.update()
+
+        count, merged_path = merge_and_print(ordered_paths)
+
+        if count == 0:
+            messagebox.showerror("错误", "图纸合并或打印失败，请重试")
+            self.status_text.set("打印失败")
+            return
+
+        self.status_text.set(f"已发送 {count} 个图纸到打印机（合并打印）")
+
+        # 确认弹窗：用户确认打印成功后清理合并文件
+        if merged_path:
+            ok = messagebox.askyesno(
+                "打印确认",
+                f"已将 {count} 个图纸合并发送到打印机\n"
+                f"打印顺序与表格一致\n\n"
+                f"打印是否成功？\n"
+                f"（确认后将自动清理临时合并文件）",
+            )
+            if ok:
+                # 延迟清理：PDF阅读器可能仍锁定文件，轮询重试删除
+                self._deferred_cleanup(merged_path)
+                self.status_text.set(f"打印完成: {count} 个图纸")
+            else:
+                self.status_text.set(
+                    f"合并文件已保留: {merged_path}"
+                )
+
+    def _deferred_cleanup(self, path, retries=10, interval=3000):
+        """延迟清理临时文件（PDF阅读器可能仍锁定文件）
+
+        每隔 interval 毫秒尝试删除一次，最多重试 retries 次。
+        """
+        try:
+            os.remove(path)
+            return  # 删除成功
+        except Exception:
+            if retries > 0:
+                self.root.after(
+                    interval,
+                    lambda: self._deferred_cleanup(path, retries - 1, interval),
+                )
 
     def _open_print_folder(self):
         """打开待打印文件夹"""

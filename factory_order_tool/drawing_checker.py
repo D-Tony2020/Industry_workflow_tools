@@ -382,30 +382,51 @@ def get_check_stats(results):
 
 # ========== 批量打印 ==========
 
-def batch_print(print_folder):
+def merge_and_print(ordered_paths):
     """
-    批量打印待打印文件夹中的所有PDF。
+    将多个PDF按顺序合并为单个文件并发送打印。
 
-    使用 os.startfile(path, "print") 调用系统默认PDF阅读器打印。
-    仅在Windows下有效。
+    使用 pypdfium2 合并，合并文件存放在系统临时目录。
+    通过 os.startfile 发送单次打印任务，保证物理打印顺序。
 
     参数:
-        print_folder: str - 待打印文件夹路径
+        ordered_paths: list[str] - 按表格顺序排列的PDF路径列表
 
     返回:
-        int - 发送打印的文件数量
+        (count, merged_path):
+            count: int - 合并的图纸数量（0表示失败）
+            merged_path: str | None - 合并文件路径（供确认后清理）
     """
-    if not os.path.isdir(print_folder):
-        return 0
+    import tempfile
 
-    count = 0
-    for fname in sorted(os.listdir(print_folder)):
-        if fname.lower().endswith(".pdf"):
-            fpath = os.path.join(print_folder, fname)
-            try:
-                os.startfile(fpath, "print")
-                count += 1
-            except Exception:
-                pass
+    paths = [p for p in ordered_paths if os.path.isfile(p)]
+    if not paths:
+        return 0, None
 
-    return count
+    # 单个文件直接打印，无需合并
+    if len(paths) == 1:
+        try:
+            os.startfile(paths[0], "print")
+        except Exception:
+            return 0, None
+        return 1, None
+
+    # 多个文件: 合并为单个PDF后打印
+    try:
+        import pypdfium2 as pdfium
+
+        merged = pdfium.PdfDocument.new()
+        for path in paths:
+            src = pdfium.PdfDocument(path)
+            merged.import_pages(src)
+            src.close()
+
+        # 存到系统临时目录（不污染图纸库）
+        merged_path = os.path.join(tempfile.gettempdir(), "订单图纸_合并打印.pdf")
+        merged.save(merged_path)
+        merged.close()
+
+        os.startfile(merged_path, "print")
+        return len(paths), merged_path
+    except Exception:
+        return 0, None
