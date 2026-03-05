@@ -97,6 +97,8 @@ def extract_version_from_filename(filename):
       "J00016175 YY60039091-导线-A04.pdf"     → "A04"
       "J00016321 YY60020144-导线（A01）.pdf"  → "A01"
       "J00016312 YY60040718导线-A01.pdf"      → "A01"
+      "J00016025 YY60030362-A.pdf"           → "A"  (纯字母版本)
+      "J00016025 YY60030362-A导线.pdf"       → "A"  (纯字母版本)
       "J00010272 YY60030215.pdf"              → None
       "YY60030192导线.pdf"                    → None
 
@@ -109,10 +111,17 @@ def extract_version_from_filename(filename):
     # 删除J编号和YY编号
     cleaned = _CLEAN_JY_PATTERN.sub("", filename)
 
-    # 在剩余文本中搜索版本号
+    # 主模式: 字母 + 可选分隔符 + 至少1位数字（A01, B/01, A.1, A0）
     match = _VERSION_PATTERN.search(cleaned)
     if match:
         return match.group(1)
+
+    # 回退: 分隔符/括号后的纯字母版本号（如 "-A.pdf", "-A导线.pdf", "（A）.pdf"）
+    # 前置: 分隔符(-/空格) 或 括号（/(
+    # 后置: 终止符(.pdf/空格/中文/括号)
+    fallback = re.search(r'[-\s（(]([A-Z])(?=[.\s\u4e00-\u9fff（()）)])', cleaned)
+    if fallback:
+        return fallback.group(1)
 
     return None
 
