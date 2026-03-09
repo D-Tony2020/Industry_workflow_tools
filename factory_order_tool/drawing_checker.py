@@ -423,8 +423,9 @@ def merge_and_print(ordered_paths):
             merged.import_pages(src)
             src.close()
 
-        # 存到系统临时目录（不污染图纸库）
-        merged_path = os.path.join(tempfile.gettempdir(), "订单图纸_合并打印.pdf")
+        # 存到系统临时目录（纯ASCII文件名避免编码问题）
+        fd, merged_path = tempfile.mkstemp(suffix=".pdf", prefix="print_merged_")
+        os.close(fd)
         merged.save(merged_path)
         merged.close()
 

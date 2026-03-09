@@ -14,11 +14,14 @@ set VER=%VER:"=%
 echo 当前版本: v%VER%
 echo.
 
+:: 指定 Python 3.10（PyInstaller 与 Python 3.14 存在兼容性问题）
+set PY310=C:\Users\LEGION\AppData\Local\Programs\Python\Python310\python.exe
+
 :: 检查虚拟环境
 if not exist ".venv\Scripts\python.exe" (
-    echo [1/4] 创建干净的虚拟环境...
-    python -m venv .venv
-    .venv\Scripts\pip.exe install --upgrade pip
+    echo [1/4] 创建干净的虚拟环境（Python 3.10）...
+    "%PY310%" -m venv .venv
+    .venv\Scripts\python.exe -m pip install --upgrade pip
     .venv\Scripts\pip.exe install -r requirements.txt pyinstaller
 ) else (
     echo [1/4] 虚拟环境已存在，跳过创建
