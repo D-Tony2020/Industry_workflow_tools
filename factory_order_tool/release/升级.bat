@@ -1,15 +1,14 @@
 @echo off
-chcp 65001 >nul
-title 工厂订单转换工具 - 升级助手
+title Industry Order Tool - Upgrade Helper
 echo.
 echo ============================================================
-echo   工厂订单转换工具 - 升级助手
+echo   Industry Order Tool - Upgrade Helper
 echo ============================================================
 echo.
-echo 启动 PowerShell 升级脚本...
+echo Starting PowerShell upgrade script...
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0升级.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0upgrade.ps1" %*
 
 echo.
 echo ============================================================

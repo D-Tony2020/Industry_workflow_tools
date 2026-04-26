@@ -115,7 +115,7 @@ Write-Host ('[3/4] 部署新版本到原位置: {0}' -f $old)
 New-Item -ItemType Directory -Path $old -Force | Out-Null
 
 # 这些文件不复制到客户部署目录（它们只属于升级包本身）
-$exclude = @('升级.bat', '升级.ps1', 'user_data_files.txt', '部署说明.txt')
+$exclude = @('升级.bat', 'upgrade.ps1', 'user_data_files.txt', '部署说明.txt')
 
 foreach ($item in Get-ChildItem -LiteralPath $pkg) {
     if ($exclude -contains $item.Name) { continue }

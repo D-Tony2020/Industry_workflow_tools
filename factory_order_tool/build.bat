@@ -108,9 +108,9 @@ if exist "release\升级.bat" (
     copy /Y "release\升级.bat" "%UP_DIR%\升级.bat" >nul
     echo   [OK] 已复制 升级.bat 到 升级包
 )
-if exist "release\升级.ps1" (
-    copy /Y "release\升级.ps1" "%UP_DIR%\升级.ps1" >nul
-    echo   [OK] 已复制 升级.ps1 到 升级包
+if exist "release\upgrade.ps1" (
+    copy /Y "release\upgrade.ps1" "%UP_DIR%\upgrade.ps1" >nul
+    echo   [OK] 已复制 upgrade.ps1 到 升级包
 )
 if exist "release\user_data_files.txt" (
     copy /Y "release\user_data_files.txt" "%UP_DIR%\user_data_files.txt" >nul
