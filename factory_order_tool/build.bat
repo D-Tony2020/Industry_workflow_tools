@@ -5,59 +5,118 @@ echo   工厂订单转换工具 - 打包脚本
 echo ========================================
 echo.
 
-:: 从 version.py 读取版本号
-for /f "tokens=2 delims==" %%a in ('findstr "^VERSION" version.py') do (
-    set RAW_VER=%%a
-)
+:: ====================================================
+:: 读取版本号 + 构建日期 (version.py 是唯一来源)
+:: ====================================================
+for /f "tokens=2 delims==" %%a in ('findstr "^VERSION" version.py') do set RAW_VER=%%a
+for /f "tokens=2 delims==" %%a in ('findstr "^BUILD_DATE" version.py') do set RAW_DATE=%%a
 set VER=%RAW_VER: =%
 set VER=%VER:"=%
-echo 当前版本: v%VER%
+set BUILD_DATE=%RAW_DATE: =%
+set BUILD_DATE=%BUILD_DATE:"=%
+echo 当前版本: v%VER%   (构建日期: %BUILD_DATE%)
 echo.
 
 :: 指定 Python 3.10（PyInstaller 与 Python 3.14 存在兼容性问题）
 set PY310=C:\Users\LEGION\AppData\Local\Programs\Python\Python310\python.exe
 
-:: 检查虚拟环境
+:: ====================================================
+:: [1/5] 虚拟环境
+:: ====================================================
 if not exist ".venv\Scripts\python.exe" (
-    echo [1/4] 创建干净的虚拟环境（Python 3.10）...
+    echo [1/5] 创建干净的虚拟环境（Python 3.10）...
     "%PY310%" -m venv .venv
     .venv\Scripts\python.exe -m pip install --upgrade pip
     .venv\Scripts\pip.exe install -r requirements.txt pyinstaller
 ) else (
-    echo [1/4] 虚拟环境已存在，跳过创建
+    echo [1/5] 虚拟环境已存在，跳过创建
 )
 
+:: ====================================================
+:: [2/5] 清理旧构建
+:: ====================================================
 echo.
-echo [2/4] 清理旧构建...
+echo [2/5] 清理旧构建...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist "订单转换工具.spec" del "订单转换工具.spec"
 
+:: ====================================================
+:: [3/5] PyInstaller 打包
+:: ====================================================
 echo.
-echo [3/4] 开始打包（单文件夹模式）...
+echo [3/5] 开始打包（单文件夹模式）...
 .venv\Scripts\python.exe -m PyInstaller --onedir --windowed --name "订单转换工具" ^
     --clean ^
     main.py
 
-echo.
-echo [4/4] 整理输出...
-set RELEASE_DIR=dist\订单转换工具_v%VER%
-if exist "%RELEASE_DIR%" rmdir /s /q "%RELEASE_DIR%"
-rename "dist\订单转换工具" "订单转换工具_v%VER%"
-
-:: 将映射表复制到发布根目录（与 _internal 同级，供用户编辑维护）
-if exist "mapping_table.xlsx" (
-    copy /Y "mapping_table.xlsx" "%RELEASE_DIR%\mapping_table.xlsx" >nul
-    echo   已复制 mapping_table.xlsx 到发布目录
+if errorlevel 1 (
+    echo.
+    echo [X] PyInstaller 打包失败，请检查上方错误信息。
+    pause
+    exit /b 1
 )
 
+:: ====================================================
+:: [4/5] 整理 完整包（首次部署 / 新客户 / 应急重置 用）
+:: ====================================================
+echo.
+echo [4/5] 整理 完整包（含 mapping_table.xlsx）...
+set FULL_DIR=dist\订单转换工具_v%VER%_完整包
+rename "dist\订单转换工具" "订单转换工具_v%VER%_完整包"
+
+if exist "mapping_table.xlsx" (
+    copy /Y "mapping_table.xlsx" "%FULL_DIR%\mapping_table.xlsx" >nul
+    echo   [OK] 已复制 mapping_table.xlsx 到 完整包
+) else (
+    echo   [!] 仓库无 mapping_table.xlsx，完整包不带映射表
+    echo       此情况下完整包仅适用于新客户「自带映射表首次部署」
+)
+
+if exist "CHANGELOG.md" (
+    copy /Y "CHANGELOG.md" "%FULL_DIR%\CHANGELOG.md" >nul
+    echo   [OK] 已复制 CHANGELOG.md 到 完整包
+)
+
+:: ====================================================
+:: [5/5] 派生 升级包（老客户升级用，不含 mapping_table.xlsx）
+:: ====================================================
+echo.
+echo [5/5] 派生 升级包（不含 mapping_table.xlsx）...
+set UP_DIR=dist\订单转换工具_v%VER%_升级包
+mkdir "%UP_DIR%"
+copy /Y "%FULL_DIR%\订单转换工具.exe" "%UP_DIR%\" >nul
+xcopy /E /I /Q /Y "%FULL_DIR%\_internal" "%UP_DIR%\_internal\" >nul
+echo   [OK] 已复制 订单转换工具.exe + _internal\ 到 升级包
+
+:: 渲染 部署说明.txt （用 PowerShell 替换占位符）
+if exist "release\部署说明_template.txt" (
+    powershell -NoProfile -Command "(Get-Content 'release\部署说明_template.txt' -Raw -Encoding UTF8) -replace '{VERSION}','%VER%' -replace '{BUILD_DATE}','%BUILD_DATE%' | Set-Content -Path '%UP_DIR%\部署说明.txt' -Encoding UTF8"
+    echo   [OK] 已生成 部署说明.txt（已渲染版本号 %VER% / 构建日期 %BUILD_DATE%）
+) else (
+    echo   [!] 未找到 release\部署说明_template.txt，升级包将不含部署说明
+)
+
+:: 复制 CHANGELOG 让客户能看到完整变更历史
+if exist "CHANGELOG.md" (
+    copy /Y "CHANGELOG.md" "%UP_DIR%\CHANGELOG.md" >nul
+    echo   [OK] 已复制 CHANGELOG.md 到 升级包
+)
+
+:: ====================================================
+:: 完成
+:: ====================================================
 echo.
 echo ========================================
-echo   打包完成!
-echo   输出目录: %RELEASE_DIR%\
-echo   版本: v%VER%
+echo   打包完成! v%VER% / %BUILD_DATE%
 echo ========================================
 echo.
-echo 部署: 将 %RELEASE_DIR%\ 整个文件夹复制到目标电脑即可
+echo   完整包: %FULL_DIR%\
+echo           （含 mapping_table.xlsx，首次部署 / 新客户 / 应急重置 用）
+echo.
+echo   升级包: %UP_DIR%\
+echo           （不含 mapping_table.xlsx，给已在使用的老客户用）
+echo           客户只需把 订单转换工具.exe + _internal\ 拖到原部署目录覆盖
+echo           即可，他们的映射表保持不动。
 echo.
 pause
