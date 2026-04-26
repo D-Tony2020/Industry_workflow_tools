@@ -175,9 +175,29 @@ class OrderConverterApp:
             side=tk.RIGHT, padx=2
         )
 
+        # ===== 解析告警条（v1.2.5）默认隐藏 =====
+        # 当 PDF 解析自检（项次连续性 / 合计对账）发现异常时显示
+        self.warning_frame = tk.Frame(self.root, bg="#FDECEA", bd=1, relief=tk.SOLID)
+        self.warning_label = tk.Label(
+            self.warning_frame,
+            text="",
+            bg="#FDECEA",
+            fg="#B00000",
+            font=("Microsoft YaHei", 10, "bold"),
+            anchor="w",
+            padx=10,
+            pady=6,
+            justify="left",
+            wraplength=1100,
+        )
+        self.warning_label.pack(fill=tk.X)
+        # 不立即 pack 这个 warning_frame；解析告警时调用 _show_warning_bar() 才显示
+
         # ===== 中间 - 数据预览表格 =====
         table_frame = ttk.LabelFrame(self.root, text="数据预览", padding=5)
         table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # 持有引用便于 warning_frame 用 before= 参数定位
+        self._preview_outer_frame = table_frame
 
         # Treeview + 滚动条（序号列 + 数据列）
         preview_tree_cols = ["_seq"] + list(PREVIEW_COLUMNS)
@@ -350,6 +370,21 @@ class OrderConverterApp:
                    activebackground="SystemButtonFace",
                    activeforeground="SystemButtonText")
 
+    # ========== 解析告警条 (v1.2.5) ==========
+
+    def _show_warning_bar(self, text):
+        """显示红底告警条（在数据预览上方）"""
+        self.warning_label.config(text=text)
+        # pack 在 数据预览 LabelFrame 之前
+        self.warning_frame.pack(
+            fill=tk.X, padx=10, pady=(2, 0), before=self._preview_outer_frame
+        )
+
+    def _hide_warning_bar(self):
+        """隐藏告警条"""
+        self.warning_frame.pack_forget()
+        self.warning_label.config(text="")
+
     # ========== 订单转换功能 ==========
 
     def _select_pdf(self):
@@ -370,9 +405,11 @@ class OrderConverterApp:
 
         self.status_text.set("正在解析PDF...")
         self.root.update()
+        # 每次解析前先重置告警条
+        self._hide_warning_bar()
 
         try:
-            self.header_info, items = parse_purchase_order(path)
+            self.header_info, items, warnings = parse_purchase_order(path)
         except Exception as e:
             messagebox.showerror("解析错误", f"PDF解析失败:\n{e}")
             self.status_text.set("解析失败")
@@ -394,6 +431,11 @@ class OrderConverterApp:
             f"解析完成: 共{total}条 | 映射成功{mapped}条 | 未映射{failed}条"
         )
 
+        # ===== v1.2.5 解析自检告警 =====
+        # 即使最终全部补全（fallback_recovered != [] 且 fallback_unresolved == []），
+        # 也要让用户知道发生过兜底，便于排查源 PDF 是否有结构异常。
+        self._handle_parse_warnings(warnings)
+
         if unmapped:
             self._highlight_btn(self.open_mapping_btn, "打开映射表(Excel)")
             unique_unmapped = sorted(set(unmapped))
@@ -405,6 +447,83 @@ class OrderConverterApp:
             )
         else:
             self._unhighlight_btn(self.open_mapping_btn, "打开映射表(Excel)")
+
+    def _handle_parse_warnings(self, warnings):
+        """v1.2.5 处理解析层自检结果。
+
+        三类信号:
+          1. fallback_unresolved 非空: 项次彻底缺失，**红色告警条 + 强制弹窗**
+          2. qty_mismatch / amount_mismatch: 合计对账失败，**红色告警条 + 强制弹窗**
+          3. fallback_recovered 非空且 unresolved 为空: 兜底已自动补回, **黄色提示条**, 不弹窗
+        """
+        bar_msgs = []
+        modal_msgs = []
+        bar_color = None  # "red" or "yellow"
+
+        recov = warnings.get("fallback_recovered", [])
+        unres = warnings.get("fallback_unresolved", [])
+        miss = warnings.get("missing_seq", [])
+
+        if unres:
+            bar_color = "red"
+            bar_msgs.append(
+                f"⚠ 项次缺失（兜底补不回）: {unres}。"
+                f" 该 PDF 解析存在静默漏失风险，请人工核对原 PDF。"
+            )
+            modal_msgs.append(
+                f"以下项次在 PDF 中标注但解析失败：{unres}\n\n"
+                f"请用 PDF 阅读器对照原文件确认是否漏检，必要时联系开发支持。"
+            )
+        elif recov:
+            bar_color = "yellow"
+            bar_msgs.append(
+                f"⚙ 解析层自动兜底已生效，补回项次: {recov}（共 {len(recov)} 项）。"
+                f"   原 PDF 第 {miss[0] if miss else '?'}-{miss[-1] if miss else '?'} 项排版异常，已自动恢复，结果可信。"
+            )
+
+        # 合计对账
+        if warnings.get("qty_mismatch"):
+            bar_color = "red"
+            bar_msgs.append(
+                f"⚠ 合计数量对账失败: PDF声明 {warnings['expected_total_qty']}"
+                f" vs 实际汇总 {warnings['actual_total_qty']:.2f}"
+            )
+            modal_msgs.append(
+                f"PDF 末尾合计数量为 {warnings['expected_total_qty']}, "
+                f"但所有项目的采购数量之和为 {warnings['actual_total_qty']:.2f}\n\n"
+                f"请检查是否有项目漏检或数量解析错误。"
+            )
+        if warnings.get("amount_mismatch"):
+            bar_color = "red"
+            bar_msgs.append(
+                f"⚠ 合计金额对账失败: PDF声明 {warnings['expected_total_amount']}"
+                f" vs 实际汇总 {warnings['actual_total_amount']:.2f}"
+            )
+            modal_msgs.append(
+                f"PDF 末尾合计金额为 {warnings['expected_total_amount']}, "
+                f"但所有项目的含税金额之和为 {warnings['actual_total_amount']:.2f}\n\n"
+                f"请检查是否有项目漏检或金额解析错误。"
+            )
+
+        if not bar_msgs:
+            return  # 一切正常，无告警
+
+        # 显示告警条（黄/红配色）
+        text = "\n".join(bar_msgs)
+        self.warning_label.config(text=text)
+        if bar_color == "red":
+            self.warning_frame.config(bg="#FDECEA")
+            self.warning_label.config(bg="#FDECEA", fg="#B00000")
+        else:  # yellow
+            self.warning_frame.config(bg="#FFF8E1")
+            self.warning_label.config(bg="#FFF8E1", fg="#7A5A00")
+        self.warning_frame.pack(
+            fill=tk.X, padx=10, pady=(2, 0), before=self._preview_outer_frame
+        )
+
+        # 红色级别告警弹窗强制提示
+        if modal_msgs:
+            messagebox.showwarning("解析自检告警", "\n\n".join(modal_msgs))
 
     def _refresh_table(self):
         """刷新预览表格"""
