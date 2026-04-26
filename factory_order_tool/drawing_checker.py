@@ -274,9 +274,12 @@ def check_drawings(output_rows, drawing_dir, print_folder=None):
         seen_codes.add(yy_code)
 
         # 1. 获取「应有版本号」
+        # 唯一来源：PDF 交期回复列（用户从客户 ERP 系统查到最新版本号后手填）
+        # v1.2.6 移除 extract_version_from_name fallback：
+        #   原 fallback 用本地映射表"品名规格"末尾 token 当作"订单版本"，
+        #   会导致用户没填交期回复列时，工具拿"本地旧版本"和"图纸库本地版本"
+        #   自比自然全绿，伪造"已比对最新版本"的假象，破坏用户工作流。
         order_version = extract_version_from_reply(row.get("_交期回复", ""))
-        if not order_version:
-            order_version = extract_version_from_name(row.get("_产品名称", ""))
 
         if not order_version:
             results.append({
@@ -285,7 +288,7 @@ def check_drawings(output_rows, drawing_dir, print_folder=None):
                 "local_version": "",
                 "drawing_path": "",
                 "status": "no_version",
-                "message": "未提供版本号",
+                "message": "请先去客户系统查最新版本号填入PDF交期回复列",
                 "suggested_name": "",
             })
             continue

@@ -716,6 +716,12 @@ class OrderConverterApp:
                 self.status_text.set(
                     f"图纸比对完成: {stats['mismatch']}个版本不匹配，请更新后重新比对"
                 )
+            elif stats["no_version"] > 0:
+                # v1.2.6: 缺订单版本号是工作流前置步骤未做，比对结果不可信
+                self.status_text.set(
+                    f"图纸比对暂停: {stats['no_version']}项缺订单版本号，"
+                    f"请先去客户系统查最新版本填入 PDF 交期回复列"
+                )
             else:
                 self.status_text.set("图纸比对完成")
 
@@ -731,6 +737,34 @@ class OrderConverterApp:
         )
         if has_unmapped:
             self._highlight_btn(self.open_mapping_btn, "打开映射表(Excel)")
+
+        # v1.2.6: 缺订单版本号 → 显式引导用户去客户系统查询并填回 PDF
+        no_version_codes = [
+            r["yy_code"]
+            for r in self.drawing_results
+            if r.get("status") == "no_version"
+        ]
+        if no_version_codes:
+            sample = no_version_codes[:15]
+            sample_str = "\n  ".join(sample)
+            suffix = (
+                f"\n  ...等共 {len(no_version_codes)} 项"
+                if len(no_version_codes) > 15
+                else ""
+            )
+            messagebox.showwarning(
+                "需先填写订单版本号",
+                f"以下 {len(no_version_codes)} 项尚未提供订单版本号，"
+                f"无法判定客户是否要求最新图纸：\n\n"
+                f"  {sample_str}{suffix}\n\n"
+                f"工作流：\n"
+                f"  1. 用 PDF 编辑器（Acrobat / Foxit / WPS）打开本订单 PDF\n"
+                f"  2. 去客户（生久）ERP 系统查询每项的最新版本号\n"
+                f"  3. 把版本号填入 PDF 表格最右侧的「交期回复」列\n"
+                f"  4. 保存 PDF 后回到本工具：重新选择该 PDF →「解析并映射」→「图纸比对」\n\n"
+                f"说明：自 v1.2.6 起，本工具不再用本地映射表的版本号当作订单版本，\n"
+                f"必须以客户系统的最新版本为准，否则比对结果不可信。"
+            )
 
         # 命名不规范提示
         if bad_names:

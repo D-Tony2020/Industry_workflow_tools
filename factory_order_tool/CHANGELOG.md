@@ -1,5 +1,39 @@
 # 更新日志
 
+## [1.2.6] - 2026-04-25
+
+### 语义修复（重要 - 影响图纸比对结果可信度）
+
+**客户反馈**：PDF 交期回复列还没填，工具就已经把"订单版本"列填上了 A01/A03 等版本号。
+客户疑问"这版本号哪儿来的"——经查为本地映射表「品名规格」末尾 token，
+**并非客户系统的最新版本**。
+
+**根因**：v1.1.0 在 `drawing_checker.check_drawings` 加了一个版本号 fallback：
+```python
+order_version = extract_version_from_reply(row.get("_交期回复", ""))
+if not order_version:
+    order_version = extract_version_from_name(row.get("_产品名称", ""))
+```
+当用户未填交期回复列时，回退到从映射表「品名规格」末尾解析版本号。
+但映射表里的版本是工厂上次维护的本地旧版本，跟客户 ERP 系统的最新版本无关。
+比对时拿"本地旧版本"和"图纸库本地版本"对照——**自比必然全绿**，
+伪造"已与客户最新版本比对完成"的假象，破坏客户的标准工作流：
+> 第一步：从客户 ERP 查最新版本，填入 PDF 交期回复列
+> 第二步：用这个版本和本地图纸做比对
+
+**修复**：
+- `drawing_checker.check_drawings` 移除 `extract_version_from_name` fallback。
+  订单版本号唯一来源 = PDF 交期回复列（用户从客户系统查到后手填）。
+- 未填时显式返回 `no_version` 状态，message 改为
+  「请先去客户系统查最新版本号填入PDF交期回复列」。
+- `main._check_drawings` 比对完成后若发现 `no_version` 项，
+  弹窗列出待填 YY 编号 + 完整工作流引导。
+- 状态栏文案配合修订：
+  「图纸比对暂停: N 项缺订单版本号，请先去客户系统查最新版本填入 PDF 交期回复列」。
+
+**保留 `extract_version_from_name` 函数本体**，仅移除 `check_drawings` 内的调用，
+未来如需"宽容模式"开关可重新引入。
+
 ## [1.2.5] - 2026-04-25
 
 ### 鲁棒性建设（重要 - 解析层防御性补丁）
