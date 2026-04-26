@@ -103,6 +103,20 @@ if exist "CHANGELOG.md" (
     echo   [OK] 已复制 CHANGELOG.md 到 升级包
 )
 
+:: 复制升级助手 (bat 引导 + ps1 主逻辑 + 用户数据白名单)
+if exist "release\升级.bat" (
+    copy /Y "release\升级.bat" "%UP_DIR%\升级.bat" >nul
+    echo   [OK] 已复制 升级.bat 到 升级包
+)
+if exist "release\升级.ps1" (
+    copy /Y "release\升级.ps1" "%UP_DIR%\升级.ps1" >nul
+    echo   [OK] 已复制 升级.ps1 到 升级包
+)
+if exist "release\user_data_files.txt" (
+    copy /Y "release\user_data_files.txt" "%UP_DIR%\user_data_files.txt" >nul
+    echo   [OK] 已复制 user_data_files.txt（用户数据白名单）到 升级包
+)
+
 :: ====================================================
 :: 完成
 :: ====================================================
@@ -115,8 +129,9 @@ echo   完整包: %FULL_DIR%\
 echo           （含 mapping_table.xlsx，首次部署 / 新客户 / 应急重置 用）
 echo.
 echo   升级包: %UP_DIR%\
-echo           （不含 mapping_table.xlsx，给已在使用的老客户用）
-echo           客户只需把 订单转换工具.exe + _internal\ 拖到原部署目录覆盖
-echo           即可，他们的映射表保持不动。
+echo           （给已在使用的老客户用，自带升级助手）
+echo           客户解压后双击「升级.bat」，弹窗选择旧部署目录，
+echo           脚本自动备份旧版 + 迁移 mapping_table / settings.json
+echo           + 部署新版 + 启动验证。
 echo.
 pause
