@@ -361,7 +361,7 @@ def _parse_main_row(cells):
 
 
 def _parse_continuation(item, cells):
-    """解析续行，补充备注信息"""
+    """解析续行，补充备注信息 + 版本号（v1.2.9）"""
     col1 = cells[1] if len(cells) > 1 else ""
     if col1:
         # 续行通常是备注（SA/SB/SC...编号开头）
@@ -369,6 +369,22 @@ def _parse_continuation(item, cells):
             item["备注"] += " " + col1.strip()
         else:
             item["备注"] = col1.strip()
+
+    # v1.2.9: 生久新版 PDF 加了"理论交期"列，主行的该 cell 是日期(如 2026-08-01),
+    #   续行的对应 cell 是版本号(如 "A03")。这里从续行末列抓版本号 token,
+    #   追加到交期回复字段(用换行分隔), 配合 drawing_checker.extract_version_from_reply
+    #   从"日期+版本号"混合文本中智能提取。
+    #   老 PDF 的续行末列通常为空,或与 col1 相同, 此逻辑不误伤。
+    last_cell = cells[-1] if cells else ""
+    text = last_cell.strip()
+    if text and text != col1.strip():
+        # 仅接受纯版本号 token(字母 + 可选分隔符 + 数字, 或纯字母)
+        # 严格模式避免误吃"需求4/10"、"6/15"等非版本内容
+        if re.match(r"^[A-Z][/.]?\d+$|^[A-Z]$", text):
+            if item["交期回复"]:
+                item["交期回复"] += "\n" + text
+            else:
+                item["交期回复"] = text
 
 
 def _parse_text_fallback(text):

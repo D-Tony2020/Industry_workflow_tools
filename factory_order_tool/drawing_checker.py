@@ -67,21 +67,50 @@ def extract_version_from_name(product_name):
 
 def extract_version_from_reply(reply_text):
     """
-    从交期回复列提取版本号。
+    从「交期回复 / 理论交期」列内容中提取版本号（v1.2.9 智能提取版）。
 
-    用户通过PDF编辑器填写，格式可能为:
-      - 纯版本号: "A02", "B/01"
-      - 含前缀: "REV A02"
+    历史：
+      - 老 PDF：最后一列是"交期回复"，用户手填纯版本号如 "A02"
+      - v1.2.9 起：生久新版 PDF 把该列改为"理论交期"，内容为「日期\\n版本号」
+        两行格式（如 "2026-08-01\\nA03"），需忽略日期只抓版本号。
+
+    支持格式:
+      - 纯版本号:       "A02" / "B/01" / "A"                    → 原样返回
+      - 日期+版本号:     "2026-08-01\\nA03" / "A03\\n2026-08-01"  → "A03"
+      - 含前缀:         "REV A02"                                → "A02"
+      - 只有日期:       "2026-08-01"                             → None
+      - 空/无匹配:      ""                                       → None
 
     参数:
-        reply_text: str - 交期回复列内容
+        reply_text: str - 该列的原始文本（可含多行、日期、版本号等）
 
     返回:
-        str | None - 版本号，或 None 如果为空
+        str | None - 版本号 token，或 None 未找到
     """
     if not reply_text or not reply_text.strip():
         return None
-    return reply_text.strip()
+    text = reply_text.strip()
+
+    # 版本号 token: 字母 + 可选分隔符 + 至少1位数字，或纯字母
+    version_re = re.compile(r"^([A-Z][/.]?\d+|[A-Z])$")
+    # 日期(yyyy-mm-dd / yyyy/mm/dd / yyyy.mm.dd)
+    date_re = re.compile(r"^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$")
+
+    # 逐行扫描：跳过空行、日期行，匹配版本号 token
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or date_re.match(line):
+            continue
+        m = version_re.match(line)
+        if m:
+            return m.group(1)
+
+    # 兜底：整串中带空白边界的版本号 token（如 "REV A02"）
+    fallback = re.search(r"(?:^|\s)([A-Z][/.]?\d+)(?:$|\s)", text)
+    if fallback:
+        return fallback.group(1)
+
+    return None
 
 
 def extract_version_from_filename(filename):
